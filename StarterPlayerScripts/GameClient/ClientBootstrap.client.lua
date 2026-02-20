@@ -12,6 +12,7 @@ local remotes = ReplicatedStorage:WaitForChild("Remotes")
 
 local selectGameMode = remotes:WaitForChild("SelectGameMode")
 local ui = UIController.new(selectGameMode)
+local ui = UIController.new()
 local spectateTarget: Player? = nil
 
 local breathing = Instance.new("Sound")
@@ -117,6 +118,14 @@ remotes:WaitForChild("AtmosphereEvent").OnClientEvent:Connect(function(kind, wor
 		end
 	elseif kind == "StaticBurst" or kind == "BreakerPop" then
 		ui:PlayStaticBurst()
+	elseif kind == "StaticBurst" then
+		ui:PlayStaticBurst()
+	elseif kind == "BreakerPop" then
+		ui:PlayStaticBurst()
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") then
+			playWorldSound("rbxassetid://12222225", root.Position, 0.45)
+		end
 	end
 end)
 

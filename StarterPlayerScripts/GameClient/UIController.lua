@@ -8,6 +8,9 @@ function UIController.new(selectModeRemote: RemoteEvent)
 	local self = setmetatable({}, UIController)
 	self._player = Players.LocalPlayer
 	self._selectModeRemote = selectModeRemote
+function UIController.new()
+	local self = setmetatable({}, UIController)
+	self._player = Players.LocalPlayer
 
 	self._gui = Instance.new("ScreenGui")
 	self._gui.Name = "Motel13HUD"
@@ -21,6 +24,8 @@ function UIController.new(selectModeRemote: RemoteEvent)
 	self._hintLabel = self:_createHintLabel()
 	self._touchFrame, self._sprintButton, self._flashlightButton = self:_createTouchControls()
 	self._menuFrame = self:_createStartMenu()
+	self._noiseOverlay = self:_createNoiseOverlay()
+	self._touchFrame, self._sprintButton, self._flashlightButton = self:_createTouchControls()
 	self._touchFrame.Visible = UserInputService.TouchEnabled
 
 	return self
@@ -140,6 +145,10 @@ function UIController:_createBar(parent: Instance, yScale: number, title: string
 	stroke.Transparency = 0.15
 	stroke.Parent = back
 
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 4)
+	corner.Parent = back
+
 	local fill = Instance.new("Frame")
 	fill.Size = UDim2.fromScale(1, 1)
 	fill.BackgroundColor3 = fillColor
@@ -177,6 +186,9 @@ function UIController:_createSpectateLabel(): TextLabel
 	label.TextSize = 12
 	label.Visible = false
 	label.Parent = self._gui
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = label
 	return label
 end
 
@@ -193,6 +205,24 @@ function UIController:_createHintLabel(): TextLabel
 	label.Visible = false
 	label.Parent = self._gui
 	return label
+end
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = label
+	return label
+end
+
+function UIController:_createNoiseOverlay(): ImageLabel
+	local image = Instance.new("ImageLabel")
+	image.Size = UDim2.fromScale(1, 1)
+	image.BackgroundTransparency = 1
+	image.Image = "rbxassetid://1316045217"
+	image.ImageTransparency = 0.95
+	image.ScaleType = Enum.ScaleType.Tile
+	image.TileSize = UDim2.fromOffset(128, 128)
+	image.Parent = self._gui
+	return image
 end
 
 function UIController:_createTouchButton(parent: Instance, name: string, text: string, position: UDim2): TextButton
@@ -213,6 +243,9 @@ function UIController:_createTouchButton(parent: Instance, name: string, text: s
 	stroke.Transparency = 0.2
 	stroke.Color = Color3.fromRGB(255, 255, 255)
 	stroke.Parent = button
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 10)
+	corner.Parent = button
 	return button
 end
 
@@ -293,6 +326,9 @@ function UIController:PlayStaticBurst()
 			self._hintLabel.Visible = false
 			self._hintLabel.Text = ""
 		end
+	self._noiseOverlay.ImageTransparency = 0.78
+	task.delay(0.2, function()
+		self._noiseOverlay.ImageTransparency = 0.95
 	end)
 end
 

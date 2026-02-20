@@ -37,6 +37,12 @@ function RoundManager:Start()
 			self:_teleportPlayersToTag(Config.Tags.LobbySpawn)
 			self:_waitForMinPlayers()
 			self:_waitForModeSelection()
+	task.spawn(function()
+		while true do
+			self:_setState("Lobby", 0)
+			self._atmosphereService:SetLobbyPreset()
+			self:_teleportPlayersToTag(Config.Tags.LobbySpawn)
+			self:_waitForMinPlayers()
 			self:_runIntermission()
 			self:_runRound()
 			self:_runEndRound()
@@ -92,6 +98,9 @@ function RoundManager:_setState(state: string, timeRemaining: number)
 		timeRemaining = timeRemaining,
 		selectedMode = self._selectedMode,
 	})
+function RoundManager:_setState(state: string, timeRemaining: number)
+	self._state = state
+	self._roundRemote:FireAllClients({ state = state, timeRemaining = timeRemaining })
 end
 
 function RoundManager:_waitForMinPlayers()

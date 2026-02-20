@@ -60,6 +60,8 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 			print("[MOTEL13] F pressed -> FlashlightToggle") -- debug, remove later
 			didPrintFlashlight = true
 		end
+		sendSprint(true)
+	elseif input.KeyCode == Enum.KeyCode.F then
 		toggleFlashlight()
 	elseif input.KeyCode == Enum.KeyCode.Q and player:GetAttribute("Downed") then
 		requestSpectateTarget:FireServer(-1)
