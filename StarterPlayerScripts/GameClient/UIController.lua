@@ -17,8 +17,9 @@ function UIController.new()
 	self._objectiveLabel = self:_createObjectivePanel()
 	self._staminaFill, self._batteryFill = self:_createBottomBars()
 	self._spectateLabel = self:_createSpectateLabel()
+	self._hintLabel = self:_createHintLabel()
+	self._noiseOverlay = self:_createNoiseOverlay()
 	self._touchFrame, self._sprintButton, self._flashlightButton = self:_createTouchControls()
-
 	self._touchFrame.Visible = UserInputService.TouchEnabled
 
 	return self
@@ -58,7 +59,6 @@ function UIController:_createObjectivePanel(): TextLabel
 	label.TextYAlignment = Enum.TextYAlignment.Top
 	label.TextWrapped = true
 	label.Parent = panel
-
 	return label
 end
 
@@ -94,7 +94,6 @@ function UIController:_createBar(parent: Instance, yScale: number, title: string
 	corner.Parent = back
 
 	local fill = Instance.new("Frame")
-	fill.Name = "Fill"
 	fill.Size = UDim2.fromScale(1, 1)
 	fill.BackgroundColor3 = fillColor
 	fill.BorderSizePixel = 0
@@ -109,13 +108,11 @@ end
 
 function UIController:_createBottomBars(): (Frame, Frame)
 	local holder = Instance.new("Frame")
-	holder.Name = "BottomHud"
 	holder.AnchorPoint = Vector2.new(0.5, 1)
 	holder.Position = UDim2.fromScale(0.5, 0.96)
 	holder.Size = UDim2.fromScale(0.5, 0.14)
 	holder.BackgroundTransparency = 1
 	holder.Parent = self._gui
-
 	local staminaFill = self:_createBar(holder, 0.48, "STAMINA", Color3.fromRGB(220, 220, 220))
 	local batteryFill = self:_createBar(holder, 0.72, "FLASHLIGHT", Color3.fromRGB(180, 215, 255))
 	return staminaFill, batteryFill
@@ -133,12 +130,40 @@ function UIController:_createSpectateLabel(): TextLabel
 	label.TextSize = 12
 	label.Visible = false
 	label.Parent = self._gui
-
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 6)
 	corner.Parent = label
-
 	return label
+end
+
+function UIController:_createHintLabel(): TextLabel
+	local label = Instance.new("TextLabel")
+	label.AnchorPoint = Vector2.new(0.5, 1)
+	label.Position = UDim2.fromScale(0.5, 0.84)
+	label.Size = UDim2.fromScale(0.45, 0.038)
+	label.BackgroundTransparency = 0.45
+	label.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	label.TextColor3 = Color3.fromRGB(230, 230, 230)
+	label.Font = Enum.Font.GothamMedium
+	label.TextSize = 12
+	label.Visible = false
+	label.Parent = self._gui
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = label
+	return label
+end
+
+function UIController:_createNoiseOverlay(): ImageLabel
+	local image = Instance.new("ImageLabel")
+	image.Size = UDim2.fromScale(1, 1)
+	image.BackgroundTransparency = 1
+	image.Image = "rbxassetid://1316045217"
+	image.ImageTransparency = 0.95
+	image.ScaleType = Enum.ScaleType.Tile
+	image.TileSize = UDim2.fromOffset(128, 128)
+	image.Parent = self._gui
+	return image
 end
 
 function UIController:_createTouchButton(parent: Instance, name: string, text: string, position: UDim2): TextButton
@@ -154,17 +179,14 @@ function UIController:_createTouchButton(parent: Instance, name: string, text: s
 	button.Text = text
 	button.AutoButtonColor = false
 	button.Parent = parent
-
 	local stroke = Instance.new("UIStroke")
 	stroke.Thickness = 1
 	stroke.Transparency = 0.2
 	stroke.Color = Color3.fromRGB(255, 255, 255)
 	stroke.Parent = button
-
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 10)
 	corner.Parent = button
-
 	return button
 end
 
@@ -176,14 +198,9 @@ function UIController:_createTouchControls(): (Frame, TextButton, TextButton)
 	frame.Size = UDim2.fromScale(0.23, 0.2)
 	frame.BackgroundTransparency = 1
 	frame.Parent = self._gui
-
 	local sprint = self:_createTouchButton(frame, "SprintButton", "SPRINT", UDim2.fromScale(0, 0))
 	local flashlight = self:_createTouchButton(frame, "FlashlightButton", "LIGHT", UDim2.fromScale(0.5, 0.5))
 	return frame, sprint, flashlight
-end
-
-function UIController:GetTouchButtons(): (TextButton, TextButton)
-	return self._sprintButton, self._flashlightButton
 end
 
 function UIController:UpdateObjectives(state)
@@ -196,16 +213,17 @@ function UIController:UpdateObjectives(state)
 	)
 end
 
-function UIController:UpdateRound(_roundData)
-	-- intentionally minimal for horror HUD
-end
-
 function UIController:UpdatePlayerState(playerState)
 	self._staminaFill.Size = UDim2.fromScale(playerState.stamina / playerState.staminaMax, 1)
 	self._batteryFill.Size = UDim2.fromScale(playerState.flashlightBattery / playerState.flashlightBatteryMax, 1)
 	self._spectateLabel.Visible = playerState.isDowned
 	if playerState.isDowned then
 		self._spectateLabel.Text = "DOWNED - Q / E TO SPECTATE"
+	end
+	local hasHint = playerState.hint and playerState.hint ~= ""
+	self._hintLabel.Visible = hasHint
+	if hasHint then
+		self._hintLabel.Text = playerState.hint
 	end
 end
 
@@ -218,16 +236,10 @@ function UIController:SetSpectateTarget(target: Player?)
 end
 
 function UIController:SetSprintButtonActive(active: boolean)
-	if not self._sprintButton then
-		return
-	end
 	self._sprintButton.BackgroundColor3 = active and Color3.fromRGB(45, 45, 45) or Color3.fromRGB(14, 14, 14)
 end
 
 function UIController:SetFlashlightButtonActive(active: boolean)
-	if not self._flashlightButton then
-		return
-	end
 	self._flashlightButton.BackgroundColor3 = active and Color3.fromRGB(60, 85, 110) or Color3.fromRGB(14, 14, 14)
 end
 
@@ -239,6 +251,13 @@ function UIController:FlashJumpscare()
 	flash.Parent = self._gui
 	task.delay(0.1, function()
 		flash:Destroy()
+	end)
+end
+
+function UIController:PlayStaticBurst()
+	self._noiseOverlay.ImageTransparency = 0.78
+	task.delay(0.2, function()
+		self._noiseOverlay.ImageTransparency = 0.95
 	end)
 end
 

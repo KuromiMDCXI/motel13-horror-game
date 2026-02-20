@@ -33,16 +33,36 @@ local function attachFlashlight(character: Model)
 	if flashlight then
 		flashlight:Destroy()
 	end
- codex/create-mvp-for-roblox-horror-game-motel-13-r0ec0l
-
-=======
- main
 	flashlight = Instance.new("SpotLight")
 	flashlight.Angle = 60
 	flashlight.Brightness = 2
 	flashlight.Range = 35
 	flashlight.Enabled = false
 	flashlight.Parent = head
+end
+
+local function playWorldSound(soundId: string, position: Vector3, volume: number)
+	local holder = Instance.new("Part")
+	holder.Anchored = true
+	holder.CanCollide = false
+	holder.Transparency = 1
+	holder.Position = position
+	holder.Size = Vector3.new(1, 1, 1)
+	holder.Parent = Workspace
+	local sound = Instance.new("Sound")
+	sound.SoundId = soundId
+	sound.Volume = volume
+	sound.RollOffMaxDistance = 120
+	sound.Parent = holder
+	sound:Play()
+	sound.Ended:Connect(function()
+		holder:Destroy()
+	end)
+	task.delay(5, function()
+		if holder.Parent then
+			holder:Destroy()
+		end
+	end)
 end
 
 player.CharacterAdded:Connect(attachFlashlight)
@@ -54,18 +74,10 @@ remotes:WaitForChild("ObjectiveUpdated").OnClientEvent:Connect(function(state)
 	ui:UpdateObjectives(state)
 end)
 
-remotes:WaitForChild("RoundStateChanged").OnClientEvent:Connect(function(roundData)
-	ui:UpdateRound(roundData)
-end)
-
 remotes:WaitForChild("PlayerStateUpdated").OnClientEvent:Connect(function(playerState)
 	ui:UpdatePlayerState(playerState)
- codex/create-mvp-for-roblox-horror-game-motel-13-r0ec0l
 	ui:SetSprintButtonActive(playerState.isRunning == true)
 	ui:SetFlashlightButtonActive(playerState.flashlightOn == true)
-
-=======
- main
 	if flashlight then
 		flashlight.Enabled = player:GetAttribute("FlashlightOn") == true
 	end
@@ -84,6 +96,29 @@ remotes:WaitForChild("Jumpscare").OnClientEvent:Connect(function()
 	scare.PlayOnRemove = true
 	scare.Parent = SoundService
 	scare:Destroy()
+end)
+
+remotes:WaitForChild("AtmosphereEvent").OnClientEvent:Connect(function(kind, worldPos, flavor)
+	if kind == "EmitterSfx" and typeof(worldPos) == "Vector3" then
+		if flavor == "Whisper" then
+			playWorldSound("rbxassetid://9125649971", worldPos, 0.7)
+		else
+			playWorldSound("rbxassetid://9114395903", worldPos, 0.65)
+		end
+	elseif kind == "DistantScream" then
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") then
+			playWorldSound("rbxassetid://138186576", root.Position + Vector3.new(0, 0, -30), 0.55)
+		end
+	elseif kind == "StaticBurst" then
+		ui:PlayStaticBurst()
+	elseif kind == "BreakerPop" then
+		ui:PlayStaticBurst()
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") then
+			playWorldSound("rbxassetid://12222225", root.Position, 0.45)
+		end
+	end
 end)
 
 RunService.RenderStepped:Connect(function()

@@ -20,9 +20,12 @@ function EnemyController.new(playerStateService)
 	self._waypoints = {}
 	self._heartbeat = nil
 	self._running = false
+	self._state = "Patrol"
+	self._target = nil
+	self._investigatePos = nil
+	self._lastKnownPos = nil
+	self._searchUntil = 0
 	self._lastPathCompute = 0
-	self._currentTarget = nil
-	self._chaseLostAt = 0
 	self._lastAttackAt = 0
 	self._patrolIndex = 1
 	return self
@@ -30,13 +33,16 @@ end
 
 function EnemyController:StartRound()
 	self._running = true
+	self._state = "Patrol"
+	self._target = nil
+	self._investigatePos = nil
+	self._lastKnownPos = nil
+	self._searchUntil = 0
 	self._waypoints = CollectionService:GetTagged(Config.Tags.EnemyWaypoint)
 	table.sort(self._waypoints, function(a, b)
 		return (a:GetAttribute("PatrolIndex") or 0) < (b:GetAttribute("PatrolIndex") or 0)
 	end)
-	self._currentTarget = nil
-	self._lastPathCompute = 0
-	self._heartbeat = RunService.Heartbeat:Connect(function(_dt)
+	self._heartbeat = RunService.Heartbeat:Connect(function()
 		self:_tick()
 	end)
 end
@@ -47,145 +53,179 @@ function EnemyController:StopRound()
 		self._heartbeat:Disconnect()
 		self._heartbeat = nil
 	end
-	self._currentTarget = nil
 end
 
 function EnemyController:_tick()
 	if not self._running then
 		return
 	end
+	local seenTarget, heardPos = self:_sensePlayers()
+	if seenTarget then
+		self._state = "Chase"
+		self._target = seenTarget
+		self._lastKnownPos = self:_getPlayerPos(seenTarget)
+	elseif self._state ~= "Chase" and heardPos then
+		self._state = "Investigate"
+		self._investigatePos = heardPos
+	elseif self._state == "Chase" and not self._target then
+		self._state = "Search"
+		self._searchUntil = os.clock() + Config.Enemy.SearchSeconds
+	end
 
-	local target = self:_findTarget()
-	if target then
-		self._currentTarget = target
-		self._chaseLostAt = tick()
-		self._humanoid.WalkSpeed = Config.Enemy.ChaseSpeed
-		self:_moveToTarget(target)
-		self:_attemptAttack(target)
+	if self._state == "Chase" then
+		self:_runChase()
+	elseif self._state == "Investigate" then
+		self:_runInvestigate()
+	elseif self._state == "Search" then
+		self:_runSearch()
 	else
-		if self._currentTarget and (tick() - self._chaseLostAt) <= Config.Enemy.LoseTargetSeconds then
-			self._humanoid.WalkSpeed = Config.Enemy.ChaseSpeed
-			self:_moveToLastKnown(self._currentTarget)
-		else
-			self._currentTarget = nil
-			self._humanoid.WalkSpeed = Config.Enemy.PatrolSpeed
-			self:_patrol()
-		end
+		self:_runPatrol()
 	end
 end
 
-function EnemyController:_findTarget(): Player?
+function EnemyController:_sensePlayers(): (Player?, Vector3?)
 	local bestTarget = nil
-	local bestDistance = math.huge
+	local heardPos = nil
+	local bestDist = math.huge
 	for _, player in ipairs(Players:GetPlayers()) do
-		if player:GetAttribute("Downed") then
+		if self._playerStateService:IsDowned(player) then
 			continue
 		end
-		local char = player.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if not hrp then
+		local pos = self:_getPlayerPos(player)
+		if not pos then
 			continue
 		end
-		local distance = (hrp.Position - self._root.Position).Magnitude
-		local canSee = distance <= Config.Enemy.SpotRange and self:_hasLineOfSight(hrp.Position, char)
-		local canHear = distance <= Config.Enemy.HearRange and self._playerStateService:IsPlayerRunning(player)
-		if (canSee or canHear) and distance < bestDistance then
-			bestDistance = distance
+		local dist = (pos - self._root.Position).Magnitude
+		local hidden = self._playerStateService:IsHidden(player)
+		local canSee = dist <= Config.Enemy.SpotRange and self:_hasLineOfSight(pos, player.Character)
+		if hidden and dist > Config.Enemy.HiddenSpotRange then
+			canSee = false
+		end
+		if canSee and dist < bestDist then
+			bestDist = dist
 			bestTarget = player
-			if distance < 16 then
+			if dist < 16 then
 				self._jumpscareRemote:FireClient(player)
 			end
 		end
+		if self._playerStateService:IsPlayerRunning(player) and dist <= Config.Enemy.HearRange then
+			heardPos = pos
+		end
 	end
-	return bestTarget
+	return bestTarget, heardPos
 end
 
-function EnemyController:_hasLineOfSight(targetPos: Vector3, targetCharacter: Model): boolean
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { self._enemyModel }
-	local direction = targetPos - self._root.Position
-	local result = Workspace:Raycast(self._root.Position, direction, params)
-	if not result then
-		return true
-	end
-	return targetCharacter and result.Instance:IsDescendantOf(targetCharacter)
-end
-
-function EnemyController:_moveToTarget(player: Player)
-	local char = player.Character
-	if not char then
-		return
-	end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if not hrp then
-		return
-	end
-	self:_pathMoveTo(hrp.Position)
-end
-
-function EnemyController:_moveToLastKnown(player: Player)
-	local char = player.Character
-	if not char then
-		return
-	end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if hrp then
-		self:_pathMoveTo(hrp.Position)
-	end
-end
-
-function EnemyController:_pathMoveTo(destination: Vector3)
-	if tick() - self._lastPathCompute < Config.Enemy.PathRecomputeSeconds then
-		return
-	end
-	self._lastPathCompute = tick()
-
-	local path = PathfindingService:CreatePath({
-		AgentRadius = 2,
-		AgentHeight = 5,
-		AgentCanJump = true,
-	})
-	path:ComputeAsync(self._root.Position, destination)
-	if path.Status ~= Enum.PathStatus.Success then
-		self._humanoid:MoveTo(destination)
-		return
-	end
-	local waypoints = path:GetWaypoints()
-	if #waypoints > 1 then
-		self._humanoid:MoveTo(waypoints[2].Position)
-	else
-		self._humanoid:MoveTo(destination)
-	end
-end
-
-function EnemyController:_patrol()
+function EnemyController:_runPatrol()
+	self._humanoid.WalkSpeed = Config.Enemy.PatrolSpeed
 	if #self._waypoints == 0 then
 		return
 	end
 	local node = self._waypoints[self._patrolIndex]
 	if node and node:IsA("BasePart") then
 		self._humanoid:MoveTo(node.Position)
-		if (node.Position - self._root.Position).Magnitude < 6 then
+		if (node.Position - self._root.Position).Magnitude < 5 then
 			self._patrolIndex = (self._patrolIndex % #self._waypoints) + 1
 		end
 	end
 end
 
+function EnemyController:_runInvestigate()
+	if not self._investigatePos then
+		self._state = "Patrol"
+		return
+	end
+	self._humanoid.WalkSpeed = Config.Enemy.InvestigateSpeed
+	self:_pathMoveTo(self._investigatePos)
+	if (self._investigatePos - self._root.Position).Magnitude < 6 then
+		self._state = "Search"
+		self._searchUntil = os.clock() + Config.Enemy.SearchSeconds
+	end
+end
+
+function EnemyController:_runChase()
+	if not self._target then
+		self._state = "Search"
+		self._searchUntil = os.clock() + Config.Enemy.SearchSeconds
+		return
+	end
+	local pos = self:_getPlayerPos(self._target)
+	if not pos then
+		self._target = nil
+		self._state = "Search"
+		self._searchUntil = os.clock() + Config.Enemy.SearchSeconds
+		return
+	end
+	self._humanoid.WalkSpeed = Config.Enemy.ChaseSpeed
+	self._lastKnownPos = pos
+	self:_pathMoveTo(pos)
+	self:_attemptAttack(self._target)
+end
+
+function EnemyController:_runSearch()
+	self._humanoid.WalkSpeed = Config.Enemy.SearchSpeed
+	if self._lastKnownPos then
+		self:_pathMoveTo(self._lastKnownPos)
+	end
+	if os.clock() >= self._searchUntil then
+		self._state = "Patrol"
+		self._target = nil
+	end
+end
+
+function EnemyController:_pathMoveTo(destination: Vector3)
+	if os.clock() - self._lastPathCompute < Config.Enemy.PathRecomputeSeconds then
+		return
+	end
+	self._lastPathCompute = os.clock()
+	local path = PathfindingService:CreatePath({ AgentRadius = 2, AgentHeight = 5, AgentCanJump = true })
+	path:ComputeAsync(self._root.Position, destination)
+	if path.Status ~= Enum.PathStatus.Success then
+		self._humanoid:MoveTo(destination)
+		return
+	end
+	local points = path:GetWaypoints()
+	if #points >= 2 then
+		self._humanoid:MoveTo(points[2].Position)
+	else
+		self._humanoid:MoveTo(destination)
+	end
+end
+
 function EnemyController:_attemptAttack(player: Player)
-	if tick() - self._lastAttackAt < Config.Enemy.AttackCooldown then
+	if os.clock() - self._lastAttackAt < Config.Enemy.AttackCooldown then
 		return
 	end
-	local char = player.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	if not hrp then
+	local pos = self:_getPlayerPos(player)
+	if not pos then
 		return
 	end
-	if (hrp.Position - self._root.Position).Magnitude > Config.Enemy.AttackRange then
-		return
+	if (pos - self._root.Position).Magnitude <= Config.Enemy.AttackRange then
+		self._lastAttackAt = os.clock()
+		self._playerStateService:DownPlayer(player)
+		self._target = nil
+		self._state = "Search"
+		self._searchUntil = os.clock() + Config.Enemy.SearchSeconds
 	end
-	self._lastAttackAt = tick()
-	self._playerStateService:DownPlayer(player)
+end
+
+function EnemyController:_getPlayerPos(player: Player): Vector3?
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") then
+		return root.Position
+	end
+	return nil
+end
+
+function EnemyController:_hasLineOfSight(targetPos: Vector3, targetCharacter: Model?): boolean
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { self._enemyModel }
+	local result = Workspace:Raycast(self._root.Position, targetPos - self._root.Position, params)
+	if not result then
+		return true
+	end
+	return targetCharacter ~= nil and result.Instance:IsDescendantOf(targetCharacter)
 end
 
 return EnemyController

@@ -6,7 +6,6 @@ local function ensureFolder(parent: Instance, name: string): Folder
 	if folder and folder:IsA("Folder") then
 		return folder
 	end
-
 	folder = Instance.new("Folder")
 	folder.Name = name
 	folder.Parent = parent
@@ -18,7 +17,6 @@ local function ensureRemoteEvent(parent: Instance, name: string): RemoteEvent
 	if remote and remote:IsA("RemoteEvent") then
 		return remote
 	end
-
 	remote = Instance.new("RemoteEvent")
 	remote.Name = name
 	remote.Parent = parent
@@ -31,33 +29,41 @@ ensureRemoteEvent(remotesFolder, "ObjectiveUpdated")
 ensureRemoteEvent(remotesFolder, "PlayerStateUpdated")
 ensureRemoteEvent(remotesFolder, "SpectateUpdated")
 ensureRemoteEvent(remotesFolder, "Jumpscare")
- codex/create-mvp-for-roblox-horror-game-motel-13-r0ec0l
-
--- Canonical gameplay input remotes
 ensureRemoteEvent(remotesFolder, "SprintState")
 ensureRemoteEvent(remotesFolder, "FlashlightToggle")
-
--- Backward compatibility with earlier naming
-ensureRemoteEvent(remotesFolder, "RequestSprint")
-ensureRemoteEvent(remotesFolder, "ToggleFlashlight")
-
-
-ensureRemoteEvent(remotesFolder, "RequestSprint")
-ensureRemoteEvent(remotesFolder, "ToggleFlashlight")
- main
 ensureRemoteEvent(remotesFolder, "RequestSpectateTarget")
+ensureRemoteEvent(remotesFolder, "Interact")
+ensureRemoteEvent(remotesFolder, "ReviveRequest")
+ensureRemoteEvent(remotesFolder, "AtmosphereEvent")
+
+-- legacy compatibility
+ensureRemoteEvent(remotesFolder, "RequestSprint")
+ensureRemoteEvent(remotesFolder, "ToggleFlashlight")
 
 local modulesFolder = ServerScriptService:WaitForChild("GameServer"):WaitForChild("Modules")
+local InventoryService = require(modulesFolder:WaitForChild("InventoryService"))
 local ObjectiveManager = require(modulesFolder:WaitForChild("ObjectiveManager"))
 local PlayerStateService = require(modulesFolder:WaitForChild("PlayerStateService"))
 local EnemyController = require(modulesFolder:WaitForChild("EnemyController"))
 local AtmosphereService = require(modulesFolder:WaitForChild("AtmosphereService"))
+local InteractionService = require(modulesFolder:WaitForChild("InteractionService"))
+local EventDirector = require(modulesFolder:WaitForChild("EventDirector"))
 local RoundManager = require(modulesFolder:WaitForChild("RoundManager"))
 
-local objectiveManager = ObjectiveManager.new()
+local inventoryService = InventoryService.new()
+local objectiveManager = ObjectiveManager.new(inventoryService)
 local playerStateService = PlayerStateService.new(objectiveManager)
 local enemyController = EnemyController.new(playerStateService)
-local atmosphereService = AtmosphereService.new(playerStateService)
+local atmosphereService = AtmosphereService.new()
+local interactionService = InteractionService.new(playerStateService, inventoryService)
+local eventDirector = EventDirector.new()
 
-local roundManager = RoundManager.new(objectiveManager, playerStateService, enemyController, atmosphereService)
+local roundManager = RoundManager.new(
+	objectiveManager,
+	playerStateService,
+	enemyController,
+	atmosphereService,
+	interactionService,
+	eventDirector
+)
 roundManager:Start()

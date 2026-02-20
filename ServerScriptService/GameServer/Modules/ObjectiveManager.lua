@@ -7,8 +7,9 @@ local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Co
 local ObjectiveManager = {}
 ObjectiveManager.__index = ObjectiveManager
 
-function ObjectiveManager.new()
+function ObjectiveManager.new(inventoryService)
 	local self = setmetatable({}, ObjectiveManager)
+	self._inventoryService = inventoryService
 	self._remotes = ReplicatedStorage:WaitForChild("Remotes")
 	self._objectiveRemote = self._remotes:WaitForChild("ObjectiveUpdated")
 	self._state = {
@@ -17,17 +18,16 @@ function ObjectiveManager.new()
 		powerRestored = false,
 		exitUnlocked = false,
 	}
-	self._aliveRoundConnections = {}
+	self._connections = {}
 	self._spawnedItems = {}
-	self._keyClaims = {}
-	self._fuseClaims = {}
-	self._powerBox = nil
+	self._claims = {}
 	self._exitGate = nil
 	self._onRoundFinished = nil
+	self._onPowerChanged = nil
 	return self
 end
 
-local function shuffle<T>(arr: {T}): {T}
+local function shuffle<T>(arr: { T }): { T }
 	local clone = table.clone(arr)
 	for i = #clone, 2, -1 do
 		local j = math.random(1, i)
@@ -36,72 +36,66 @@ local function shuffle<T>(arr: {T}): {T}
 	return clone
 end
 
-local function clearConnections(connections)
-	for _, connection in ipairs(connections) do
-		connection:Disconnect()
-	end
-	table.clear(connections)
-end
-
-function ObjectiveManager:StartRound(onObjectivesComplete: () -> ())
+function ObjectiveManager:StartRound(onObjectivesComplete: () -> (), onPowerChanged: (boolean) -> ())
 	self:ResetRound()
 	self._onRoundFinished = onObjectivesComplete
+	self._onPowerChanged = onPowerChanged
+	self._inventoryService:ResetRound()
 
 	local keySpawns = shuffle(CollectionService:GetTagged(Config.Tags.KeySpawn))
 	local fuseSpawns = shuffle(CollectionService:GetTagged(Config.Tags.FuseSpawn))
 
 	for i = 1, math.min(Config.Objectives.RequiredKeys, #keySpawns) do
-		self:_spawnPickup("Key", i, keySpawns[i], self._keyClaims)
+		self:_spawnPickup("Key", i, keySpawns[i])
 	end
-
 	for i = 1, math.min(Config.Objectives.RequiredFuses, #fuseSpawns) do
-		self:_spawnPickup("Fuse", i, fuseSpawns[i], self._fuseClaims)
+		self:_spawnPickup("Fuse", i, fuseSpawns[i])
 	end
 
 	self:_bindPowerBox()
 	self:_bindExitGate()
 	self:BroadcastState()
+	if self._onPowerChanged then
+		self._onPowerChanged(false)
+	end
 end
 
 function ObjectiveManager:ResetRound()
-	clearConnections(self._aliveRoundConnections)
+	for _, connection in ipairs(self._connections) do
+		connection:Disconnect()
+	end
+	table.clear(self._connections)
 	for _, item in ipairs(self._spawnedItems) do
 		if item and item.Parent then
 			item:Destroy()
 		end
 	end
 	table.clear(self._spawnedItems)
-	table.clear(self._keyClaims)
-	table.clear(self._fuseClaims)
-	self._powerBox = nil
+	table.clear(self._claims)
+	self._state = { keysFound = 0, fusesInserted = 0, powerRestored = false, exitUnlocked = false }
 	self._exitGate = nil
-	self._state.keysFound = 0
-	self._state.fusesInserted = 0
-	self._state.powerRestored = false
-	self._state.exitUnlocked = false
+end
+
+function ObjectiveManager:IsPowerRestored(): boolean
+	return self._state.powerRestored
 end
 
 function ObjectiveManager:GetState()
 	return table.clone(self._state)
 end
 
-function ObjectiveManager:IsExitUnlocked(): boolean
-	return self._state.exitUnlocked
-end
-
-function ObjectiveManager:BroadcastState(player)
+function ObjectiveManager:BroadcastState(player: Player?)
 	if player then
 		self._objectiveRemote:FireClient(player, self:GetState())
-		return
+	else
+		self._objectiveRemote:FireAllClients(self:GetState())
 	end
-	self._objectiveRemote:FireAllClients(self:GetState())
 end
 
-function ObjectiveManager:_spawnPickup(kind: string, id: number, spawnPoint: Instance, claimsTable)
+function ObjectiveManager:_spawnPickup(kind: string, id: number, spawnPoint: Instance)
 	if not spawnPoint:IsA("BasePart") then
 		return
 	end
-
 	local part = Instance.new("Part")
 	part.Name = string.format("%s_%d", kind, id)
 	part.Size = Vector3.new(1, 1, 1)
@@ -121,42 +115,39 @@ function ObjectiveManager:_spawnPickup(kind: string, id: number, spawnPoint: Ins
 	prompt.Parent = part
 
 	table.insert(self._spawnedItems, part)
-
-	table.insert(self._aliveRoundConnections, prompt.Triggered:Connect(function(player)
-		if claimsTable[id] then
+	table.insert(self._connections, prompt.Triggered:Connect(function(player)
+		local claimKey = kind .. id
+		if self._claims[claimKey] then
 			return
 		end
-		claimsTable[id] = player.UserId
-		part:Destroy()
+		self._claims[claimKey] = true
 		if kind == "Key" then
+			self._inventoryService:AddKey(player, id)
 			self._state.keysFound += 1
 		else
+			self._inventoryService:AddFuse(player)
 			self._state.fusesInserted += 1
 		end
+		part:Destroy()
 		self:_evaluateExitUnlock()
 		self:BroadcastState()
 	end))
 end
 
 function ObjectiveManager:_bindPowerBox()
-	local boxes = CollectionService:GetTagged(Config.Tags.PowerBox)
-	local box = boxes[1]
+	local box = CollectionService:GetTagged(Config.Tags.PowerBox)[1]
 	if not box or not box:IsA("BasePart") then
-		warn("[ObjectiveManager] Missing tagged PowerBox part")
+		warn("[ObjectiveManager] Missing PowerBox")
 		return
 	end
-	self._powerBox = box
-	local prompt = box:FindFirstChildOfClass("ProximityPrompt")
-	if not prompt then
-		prompt = Instance.new("ProximityPrompt")
-		prompt.ActionText = "Restore Power"
-		prompt.ObjectText = "Power Box"
-		prompt.RequiresLineOfSight = false
-		prompt.MaxActivationDistance = 10
-		prompt.Parent = box
-	end
+	local prompt = box:FindFirstChildOfClass("ProximityPrompt") or Instance.new("ProximityPrompt")
+	prompt.ActionText = "Restore Power"
+	prompt.ObjectText = "Power Box"
+	prompt.RequiresLineOfSight = false
+	prompt.MaxActivationDistance = 10
+	prompt.Parent = box
 
-	table.insert(self._aliveRoundConnections, prompt.Triggered:Connect(function(_player)
+	table.insert(self._connections, prompt.Triggered:Connect(function(_player)
 		if self._state.powerRestored then
 			return
 		end
@@ -166,41 +157,36 @@ function ObjectiveManager:_bindPowerBox()
 		self._state.powerRestored = true
 		self:_evaluateExitUnlock()
 		self:BroadcastState()
+		if self._onPowerChanged then
+			self._onPowerChanged(true)
+		end
 	end))
 end
 
 function ObjectiveManager:_bindExitGate()
-	local gates = CollectionService:GetTagged(Config.Tags.ExitGate)
-	local gate = gates[1]
+	local gate = CollectionService:GetTagged(Config.Tags.ExitGate)[1]
 	if not gate or not gate:IsA("BasePart") then
-		warn("[ObjectiveManager] Missing tagged ExitGate part")
+		warn("[ObjectiveManager] Missing ExitGate")
 		return
 	end
 	self._exitGate = gate
 	gate:SetAttribute("Unlocked", false)
-	local prompt = gate:FindFirstChildOfClass("ProximityPrompt")
-	if not prompt then
-		prompt = Instance.new("ProximityPrompt")
-		prompt.ActionText = "Unlock Exit"
-		prompt.ObjectText = "Gate Console"
-		prompt.RequiresLineOfSight = false
-		prompt.MaxActivationDistance = 10
-		prompt.Parent = gate
-	end
+	local prompt = gate:FindFirstChildOfClass("ProximityPrompt") or Instance.new("ProximityPrompt")
+	prompt.ActionText = "Unlock Exit"
+	prompt.ObjectText = "Gate Console"
+	prompt.RequiresLineOfSight = false
+	prompt.MaxActivationDistance = 10
+	prompt.Parent = gate
 
-	table.insert(self._aliveRoundConnections, prompt.Triggered:Connect(function(_player)
-		if not self._state.exitUnlocked then
-			return
-		end
-		if self._onRoundFinished then
+	table.insert(self._connections, prompt.Triggered:Connect(function(_player)
+		if self._state.exitUnlocked and self._onRoundFinished then
 			self._onRoundFinished()
 		end
 	end))
 end
 
 function ObjectiveManager:_evaluateExitUnlock()
-	local keysReady = self._state.keysFound >= Config.Objectives.RequiredKeys
-	if keysReady and self._state.powerRestored then
+	if self._state.keysFound >= Config.Objectives.RequiredKeys and self._state.powerRestored then
 		self._state.exitUnlocked = true
 		if self._exitGate then
 			self._exitGate:SetAttribute("Unlocked", true)

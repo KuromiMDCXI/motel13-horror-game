@@ -7,12 +7,14 @@ local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Co
 local RoundManager = {}
 RoundManager.__index = RoundManager
 
-function RoundManager.new(objectiveManager, playerStateService, enemyController, atmosphereService)
+function RoundManager.new(objectiveManager, playerStateService, enemyController, atmosphereService, interactionService, eventDirector)
 	local self = setmetatable({}, RoundManager)
 	self._objectiveManager = objectiveManager
 	self._playerStateService = playerStateService
 	self._enemyController = enemyController
 	self._atmosphereService = atmosphereService
+	self._interactionService = interactionService
+	self._eventDirector = eventDirector
 	self._roundRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RoundStateChanged")
 	self._state = "Lobby"
 	self._roundEndRequested = false
@@ -23,6 +25,7 @@ function RoundManager:Start()
 	task.spawn(function()
 		while true do
 			self:_setState("Lobby", 0)
+			self._atmosphereService:SetLobbyPreset()
 			self:_teleportPlayersToTag(Config.Tags.LobbySpawn)
 			self:_waitForMinPlayers()
 			self:_runIntermission()
@@ -57,9 +60,13 @@ function RoundManager:_runRound()
 	self:_teleportPlayersToTag(Config.Tags.PlayerSpawn)
 	self._objectiveManager:StartRound(function()
 		self._roundEndRequested = true
+	end, function(powerOn)
+		self._atmosphereService:SetPowerRestored(powerOn)
 	end)
 	self._enemyController:StartRound()
+	self._interactionService:StartRound()
 	self._atmosphereService:StartRound()
+	self._eventDirector:StartRound()
 
 	for t = Config.Round.RoundDuration, 0, -1 do
 		self:_setState("InRound", t)
@@ -72,7 +79,9 @@ function RoundManager:_runRound()
 		task.wait(1)
 	end
 
+	self._eventDirector:StopRound()
 	self._enemyController:StopRound()
+	self._interactionService:StopRound()
 	self._atmosphereService:StopRound()
 	self._objectiveManager:ResetRound()
 	self._playerStateService:SetRoundActive(false)
