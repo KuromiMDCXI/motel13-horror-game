@@ -31,6 +31,7 @@ ensureRemoteEvent(remotesFolder, "ObjectiveUpdated")
 ensureRemoteEvent(remotesFolder, "PlayerStateUpdated")
 ensureRemoteEvent(remotesFolder, "SpectateUpdated")
 ensureRemoteEvent(remotesFolder, "Jumpscare")
+ codex/create-mvp-for-roblox-horror-game-motel-13-r0ec0l
 
 -- Canonical gameplay input remotes
 ensureRemoteEvent(remotesFolder, "SprintState")
@@ -40,6 +41,10 @@ ensureRemoteEvent(remotesFolder, "FlashlightToggle")
 ensureRemoteEvent(remotesFolder, "RequestSprint")
 ensureRemoteEvent(remotesFolder, "ToggleFlashlight")
 
+
+ensureRemoteEvent(remotesFolder, "RequestSprint")
+ensureRemoteEvent(remotesFolder, "ToggleFlashlight")
+ main
 ensureRemoteEvent(remotesFolder, "RequestSpectateTarget")
 
 local modulesFolder = ServerScriptService:WaitForChild("GameServer"):WaitForChild("Modules")

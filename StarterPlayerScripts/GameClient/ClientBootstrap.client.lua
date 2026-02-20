@@ -33,7 +33,10 @@ local function attachFlashlight(character: Model)
 	if flashlight then
 		flashlight:Destroy()
 	end
+ codex/create-mvp-for-roblox-horror-game-motel-13-r0ec0l
 
+=======
+ main
 	flashlight = Instance.new("SpotLight")
 	flashlight.Angle = 60
 	flashlight.Brightness = 2
@@ -57,9 +60,12 @@ end)
 
 remotes:WaitForChild("PlayerStateUpdated").OnClientEvent:Connect(function(playerState)
 	ui:UpdatePlayerState(playerState)
+ codex/create-mvp-for-roblox-horror-game-motel-13-r0ec0l
 	ui:SetSprintButtonActive(playerState.isRunning == true)
 	ui:SetFlashlightButtonActive(playerState.flashlightOn == true)
 
+=======
+ main
 	if flashlight then
 		flashlight.Enabled = player:GetAttribute("FlashlightOn") == true
 	end
