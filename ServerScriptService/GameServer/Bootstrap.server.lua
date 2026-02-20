@@ -6,6 +6,7 @@ local function ensureFolder(parent: Instance, name: string): Folder
 	if folder and folder:IsA("Folder") then
 		return folder
 	end
+
 	folder = Instance.new("Folder")
 	folder.Name = name
 	folder.Parent = parent
@@ -17,6 +18,7 @@ local function ensureRemoteEvent(parent: Instance, name: string): RemoteEvent
 	if remote and remote:IsA("RemoteEvent") then
 		return remote
 	end
+
 	remote = Instance.new("RemoteEvent")
 	remote.Name = name
 	remote.Parent = parent
@@ -29,8 +31,20 @@ ensureRemoteEvent(remotesFolder, "ObjectiveUpdated")
 ensureRemoteEvent(remotesFolder, "PlayerStateUpdated")
 ensureRemoteEvent(remotesFolder, "SpectateUpdated")
 ensureRemoteEvent(remotesFolder, "Jumpscare")
+ codex/create-mvp-for-roblox-horror-game-motel-13-r0ec0l
+
+-- Canonical gameplay input remotes
+ensureRemoteEvent(remotesFolder, "SprintState")
+ensureRemoteEvent(remotesFolder, "FlashlightToggle")
+
+-- Backward compatibility with earlier naming
 ensureRemoteEvent(remotesFolder, "RequestSprint")
 ensureRemoteEvent(remotesFolder, "ToggleFlashlight")
+
+
+ensureRemoteEvent(remotesFolder, "RequestSprint")
+ensureRemoteEvent(remotesFolder, "ToggleFlashlight")
+ main
 ensureRemoteEvent(remotesFolder, "RequestSpectateTarget")
 
 local modulesFolder = ServerScriptService:WaitForChild("GameServer"):WaitForChild("Modules")
