@@ -4,8 +4,24 @@ local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
-local sprintStateRemote = remotes:WaitForChild("SprintState")
-local flashlightToggleRemote = remotes:WaitForChild("FlashlightToggle")
+
+local function getRemoteEvent(primaryName: string, legacyName: string): RemoteEvent
+	local primary = remotes:FindFirstChild(primaryName)
+	if primary and primary:IsA("RemoteEvent") then
+		return primary
+	end
+
+	local legacy = remotes:FindFirstChild(legacyName)
+	if legacy and legacy:IsA("RemoteEvent") then
+		return legacy
+	end
+
+	local created = remotes:WaitForChild(primaryName)
+	return created :: RemoteEvent
+end
+
+local sprintStateRemote = getRemoteEvent("SprintState", "RequestSprint")
+local flashlightToggleRemote = getRemoteEvent("FlashlightToggle", "ToggleFlashlight")
 local requestSpectateTarget = remotes:WaitForChild("RequestSpectateTarget")
 
 local wantsSprint = false
