@@ -16,12 +16,27 @@ function RoundManager.new(objectiveManager, playerStateService, enemyController,
 	self._interactionService = interactionService
 	self._eventDirector = eventDirector
 	self._roundRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("RoundStateChanged")
+	self._modeRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("SelectGameMode")
+	self._selectedMode = nil
+	self._modeLockedByUserId = nil
+	self._selectionConnection = nil
 	self._state = "Lobby"
 	self._roundEndRequested = false
 	return self
 end
 
 function RoundManager:Start()
+	self._selectionConnection = self._modeRemote.OnServerEvent:Connect(function(player, mode)
+		self:_onModeSelected(player, mode)
+	end)
+
+	task.spawn(function()
+		while true do
+			self:_setState("Lobby", 30)
+			self._atmosphereService:SetLobbyPreset()
+			self:_teleportPlayersToTag(Config.Tags.LobbySpawn)
+			self:_waitForMinPlayers()
+			self:_waitForModeSelection()
 	task.spawn(function()
 		while true do
 			self:_setState("Lobby", 0)
@@ -35,6 +50,54 @@ function RoundManager:Start()
 	end)
 end
 
+function RoundManager:_onModeSelected(player: Player, mode: string)
+	if self._state ~= "Lobby" then
+		return
+	end
+	if mode ~= "Solo" and mode ~= "Multi" then
+		return
+	end
+
+	if self._modeLockedByUserId then
+		if player.UserId ~= self._modeLockedByUserId then
+			return
+		end
+	else
+		local host = Players:GetPlayers()[1]
+		if host and host.UserId ~= player.UserId then
+			return
+		end
+		self._modeLockedByUserId = player.UserId
+	end
+
+	self._selectedMode = mode
+	self:_setState("Lobby", 0)
+end
+
+function RoundManager:_waitForModeSelection()
+	self._selectedMode = nil
+	self._modeLockedByUserId = nil
+
+	for t = 30, 0, -1 do
+		if self._selectedMode then
+			break
+		end
+		self:_setState("Lobby", t)
+		task.wait(1)
+	end
+
+	if not self._selectedMode then
+		self._selectedMode = "Multi"
+	end
+end
+
+function RoundManager:_setState(state: string, timeRemaining: number)
+	self._state = state
+	self._roundRemote:FireAllClients({
+		state = state,
+		timeRemaining = timeRemaining,
+		selectedMode = self._selectedMode,
+	})
 function RoundManager:_setState(state: string, timeRemaining: number)
 	self._state = state
 	self._roundRemote:FireAllClients({ state = state, timeRemaining = timeRemaining })
@@ -47,6 +110,10 @@ function RoundManager:_waitForMinPlayers()
 end
 
 function RoundManager:_runIntermission()
+	if self._selectedMode == "Solo" then
+		self:_setState("Intermission", 0)
+		return
+	end
 	for t = Config.Round.IntermissionDuration, 0, -1 do
 		self:_setState("Intermission", t)
 		task.wait(1)

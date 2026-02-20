@@ -35,10 +35,13 @@ ensureRemoteEvent(remotesFolder, "RequestSpectateTarget")
 ensureRemoteEvent(remotesFolder, "Interact")
 ensureRemoteEvent(remotesFolder, "ReviveRequest")
 ensureRemoteEvent(remotesFolder, "AtmosphereEvent")
+ensureRemoteEvent(remotesFolder, "SelectGameMode")
 
 -- legacy compatibility
 ensureRemoteEvent(remotesFolder, "RequestSprint")
 ensureRemoteEvent(remotesFolder, "ToggleFlashlight")
+
+print("[MOTEL13] Bootstrap running - remotes ensured") -- debug, remove later
 
 local modulesFolder = ServerScriptService:WaitForChild("GameServer"):WaitForChild("Modules")
 local InventoryService = require(modulesFolder:WaitForChild("InventoryService"))

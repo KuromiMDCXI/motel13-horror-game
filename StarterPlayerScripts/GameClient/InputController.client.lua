@@ -5,6 +5,8 @@ local UserInputService = game:GetService("UserInputService")
 local player = Players.LocalPlayer
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 
+print("[MOTEL13] InputController loaded") -- debug, remove later
+
 local function getRemoteEvent(primaryName: string, legacyName: string?): RemoteEvent
 	local primary = remotes:FindFirstChild(primaryName)
 	if primary and primary:IsA("RemoteEvent") then
@@ -26,6 +28,8 @@ local interactRemote = getRemoteEvent("Interact")
 
 local wantsSprint = false
 local flashlightEnabled = false
+local didPrintShift = false
+local didPrintFlashlight = false
 
 local function sendSprint(newState: boolean)
 	if wantsSprint == newState then
@@ -46,6 +50,16 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	end
 
 	if input.KeyCode == Enum.KeyCode.LeftShift then
+		if not didPrintShift then
+			print("[MOTEL13] Shift pressed -> SprintState(true)") -- debug, remove later
+			didPrintShift = true
+		end
+		sendSprint(true)
+	elseif input.KeyCode == Enum.KeyCode.F then
+		if not didPrintFlashlight then
+			print("[MOTEL13] F pressed -> FlashlightToggle") -- debug, remove later
+			didPrintFlashlight = true
+		end
 		sendSprint(true)
 	elseif input.KeyCode == Enum.KeyCode.F then
 		toggleFlashlight()

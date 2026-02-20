@@ -4,6 +4,10 @@ local UserInputService = game:GetService("UserInputService")
 local UIController = {}
 UIController.__index = UIController
 
+function UIController.new(selectModeRemote: RemoteEvent)
+	local self = setmetatable({}, UIController)
+	self._player = Players.LocalPlayer
+	self._selectModeRemote = selectModeRemote
 function UIController.new()
 	local self = setmetatable({}, UIController)
 	self._player = Players.LocalPlayer
@@ -18,6 +22,8 @@ function UIController.new()
 	self._staminaFill, self._batteryFill = self:_createBottomBars()
 	self._spectateLabel = self:_createSpectateLabel()
 	self._hintLabel = self:_createHintLabel()
+	self._touchFrame, self._sprintButton, self._flashlightButton = self:_createTouchControls()
+	self._menuFrame = self:_createStartMenu()
 	self._noiseOverlay = self:_createNoiseOverlay()
 	self._touchFrame, self._sprintButton, self._flashlightButton = self:_createTouchControls()
 	self._touchFrame.Visible = UserInputService.TouchEnabled
@@ -37,6 +43,56 @@ function UIController:_applyPanelStyle(frame: Frame)
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 6)
 	corner.Parent = frame
+end
+
+function UIController:_createStartMenu(): Frame
+	local frame = Instance.new("Frame")
+	frame.Name = "StartMenu"
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.Position = UDim2.fromScale(0.5, 0.5)
+	frame.Size = UDim2.fromScale(0.34, 0.3)
+	frame.Parent = self._gui
+	self:_applyPanelStyle(frame)
+
+	local title = Instance.new("TextLabel")
+	title.BackgroundTransparency = 1
+	title.Size = UDim2.fromScale(1, 0.25)
+	title.Font = Enum.Font.GothamBold
+	title.Text = "MOTEL 13"
+	title.TextSize = 32
+	title.TextColor3 = Color3.fromRGB(235, 235, 235)
+	title.Parent = frame
+
+	local function createButton(name: string, text: string, y: number, mode: string)
+		local btn = Instance.new("TextButton")
+		btn.Name = name
+		btn.AnchorPoint = Vector2.new(0.5, 0)
+		btn.Position = UDim2.fromScale(0.5, y)
+		btn.Size = UDim2.fromScale(0.7, 0.22)
+		btn.Text = text
+		btn.Font = Enum.Font.GothamMedium
+		btn.TextSize = 18
+		btn.TextColor3 = Color3.fromRGB(245, 245, 245)
+		btn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+		btn.BackgroundTransparency = 0.2
+		btn.Parent = frame
+		local stroke = Instance.new("UIStroke")
+		stroke.Thickness = 1
+		stroke.Color = Color3.fromRGB(255, 255, 255)
+		stroke.Transparency = 0.2
+		stroke.Parent = btn
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 8)
+		corner.Parent = btn
+		btn.Activated:Connect(function()
+			self._selectModeRemote:FireServer(mode)
+		end)
+	end
+
+	createButton("SoloButton", "SOLO", 0.36, "Solo")
+	createButton("MultiButton", "MULTIPLAYER", 0.64, "Multi")
+
+	return frame
 end
 
 function UIController:_createObjectivePanel(): TextLabel
@@ -148,6 +204,9 @@ function UIController:_createHintLabel(): TextLabel
 	label.TextSize = 12
 	label.Visible = false
 	label.Parent = self._gui
+	return label
+end
+
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 6)
 	corner.Parent = label
@@ -203,6 +262,11 @@ function UIController:_createTouchControls(): (Frame, TextButton, TextButton)
 	return frame, sprint, flashlight
 end
 
+function UIController:UpdateRound(roundData)
+	local inLobby = roundData.state == "Lobby"
+	self._menuFrame.Visible = inLobby
+end
+
 function UIController:UpdateObjectives(state)
 	self._objectiveLabel.Text = string.format(
 		"KEYS %d/6\nFUSES %d/3\nPOWER %s\nEXIT %s",
@@ -255,6 +319,13 @@ function UIController:FlashJumpscare()
 end
 
 function UIController:PlayStaticBurst()
+	self._hintLabel.Visible = true
+	self._hintLabel.Text = "..."
+	task.delay(0.2, function()
+		if self._hintLabel.Text == "..." then
+			self._hintLabel.Visible = false
+			self._hintLabel.Text = ""
+		end
 	self._noiseOverlay.ImageTransparency = 0.78
 	task.delay(0.2, function()
 		self._noiseOverlay.ImageTransparency = 0.95

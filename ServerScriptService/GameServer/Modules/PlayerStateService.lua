@@ -17,6 +17,7 @@ function PlayerStateService.new(_objectiveManager)
 	self._warnedMissingHumanoid = {}
 	self._warnedMissingCharacter = {}
 	self._sendAccumulator = 0
+	self._sprintDebugSeen = {}
 
 	self._remotes = ReplicatedStorage:WaitForChild("Remotes")
 	self._playerStateUpdated = self._remotes:WaitForChild("PlayerStateUpdated")
@@ -238,6 +239,10 @@ function PlayerStateService:_setupPlayer(player: Player)
 end
 
 function PlayerStateService:_handleSprintRequest(player: Player, wantsSprint: boolean)
+	if not self._sprintDebugSeen[player.UserId] then
+		print(string.format("[MOTEL13] SprintState received from %s", player.Name)) -- debug, remove later
+		self._sprintDebugSeen[player.UserId] = true
+	end
 	local state = self._states[player]
 	if not state then
 		return
@@ -357,6 +362,7 @@ function PlayerStateService:_tick(dt: number)
 
 	if self._sendAccumulator >= 0.2 then
 		self._sendAccumulator = 0
+	self._sprintDebugSeen = {}
 		for player, _ in pairs(self._states) do
 			self:_broadcastState(player)
 		end

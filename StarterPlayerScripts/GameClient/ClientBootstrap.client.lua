@@ -10,6 +10,8 @@ local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
 local remotes = ReplicatedStorage:WaitForChild("Remotes")
 
+local selectGameMode = remotes:WaitForChild("SelectGameMode")
+local ui = UIController.new(selectGameMode)
 local ui = UIController.new()
 local spectateTarget: Player? = nil
 
@@ -70,6 +72,10 @@ if player.Character then
 	attachFlashlight(player.Character)
 end
 
+remotes:WaitForChild("RoundStateChanged").OnClientEvent:Connect(function(roundData)
+	ui:UpdateRound(roundData)
+end)
+
 remotes:WaitForChild("ObjectiveUpdated").OnClientEvent:Connect(function(state)
 	ui:UpdateObjectives(state)
 end)
@@ -110,6 +116,8 @@ remotes:WaitForChild("AtmosphereEvent").OnClientEvent:Connect(function(kind, wor
 		if root and root:IsA("BasePart") then
 			playWorldSound("rbxassetid://138186576", root.Position + Vector3.new(0, 0, -30), 0.55)
 		end
+	elseif kind == "StaticBurst" or kind == "BreakerPop" then
+		ui:PlayStaticBurst()
 	elseif kind == "StaticBurst" then
 		ui:PlayStaticBurst()
 	elseif kind == "BreakerPop" then
